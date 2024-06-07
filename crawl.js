@@ -28,30 +28,60 @@ function getURLsFromHTML(htmlBody, baseURL) {
 	return processedUrls;
 }
 
-async function crawlPage(currentURL) {
+async function fetchHTML(currentURL) {
 	console.log(`crawling ${currentURL}`);
-	// try {
-	const res = await fetch(currentURL, {
-		method: 'GET',
-		mode: 'cors',
-		headers: {
-			'Content-Type': 'application/json',
-		},
-	});
-	// } catch (err) {
-	// throw new Error(`Network Error: ${err.message}`);
-	// }
 
-	// if (res.status > 399) {
-	// 	console.log(`HTML Error: ${res.status} ${res.statusText}`);
-	// }
-	// const contentType = res.headers.get('content-type');
-	// if (!contentType || !contentType.includes('text/html')) {
-	// console.log(`Non-HTML response Error: ${res.status} ${res.statusText}`);
-	// return;
-	// }
+	let res;
+	try {
+		res = await fetch(currentURL);
+	} catch (err) {
+		throw new Error(`Network Error: ${err.message}`);
+	}
 
-	console.log(await res.text());
+	if (res.status > 399) {
+		throw new Error(`HTML Error: ${res.status} ${res.statusText}`);
+	}
+
+	const contentType = res.headers.get('content-type');
+	if (!contentType || !contentType.includes('text/html')) {
+		throw new Error(
+			`Non-HTML response Error: ${res.status} ${res.statusText}`
+		);
+	}
+
+	return res.text();
+}
+
+async function crawlPage(baseURL, currentURL = baseURL, pages = {}) {
+	const baseURLObj = new URL(baseURL);
+	const currentURLObj = new URL(currentURL);
+	if (currentURLObj.hostname !== baseURLObj.hostname) {
+		return pages;
+	}
+
+	const normalizedCurrent = normalizeURL(currentURL);
+	if (pages[normalizedCurrent]) {
+		pages[normalizedCurrent]++;
+		return pages;
+	}
+
+	let html;
+	try {
+		html = await fetchHTML(currentURL);
+	} catch (err) {
+		console.log(err.message);
+		return pages;
+	}
+	pages[normalizedCurrent] = 1;
+
+	const urls = getURLsFromHTML(html, currentURL);
+	for (let url of urls) {
+		{
+			pages = await crawlPage(baseURL, url, pages);
+		}
+	}
+
+	return pages;
 }
 
 export { normalizeURL, getURLsFromHTML, crawlPage };
